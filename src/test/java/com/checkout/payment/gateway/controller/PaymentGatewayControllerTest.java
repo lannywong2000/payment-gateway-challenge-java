@@ -43,6 +43,7 @@ class PaymentGatewayControllerTest {
 
   private static final String BANK_URL = "http://localhost:8080/payments";
   private static final String PAYMENTS_URL = "/payments";
+  private static final String PAYMENT_URL = "/payment";
 
   @BeforeEach
   void setUp() {
@@ -50,7 +51,7 @@ class PaymentGatewayControllerTest {
   }
 
   // -------------------------------------------------------------------------
-  // GET /payments/{id}
+  // GET /payment/{id}
   // -------------------------------------------------------------------------
 
   @Test
@@ -58,7 +59,7 @@ class PaymentGatewayControllerTest {
     PostPaymentResponse payment = buildStoredPayment(PaymentStatus.AUTHORIZED, 4321);
     paymentsRepository.add(payment);
 
-    mvc.perform(MockMvcRequestBuilders.get(PAYMENTS_URL + "/" + payment.getId()))
+    mvc.perform(MockMvcRequestBuilders.get(PAYMENT_URL + "/" + payment.getId()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.id").value(payment.getId().toString()))
         .andExpect(jsonPath("$.status").value("Authorized"))
@@ -71,7 +72,7 @@ class PaymentGatewayControllerTest {
 
   @Test
   void whenPaymentWithIdDoesNotExistThen404IsReturned() throws Exception {
-    mvc.perform(MockMvcRequestBuilders.get(PAYMENTS_URL + "/" + UUID.randomUUID()))
+    mvc.perform(MockMvcRequestBuilders.get(PAYMENT_URL + "/" + UUID.randomUUID()))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.message").value("Page not found"));
   }
@@ -269,7 +270,7 @@ class PaymentGatewayControllerTest {
 
     // Extract the ID and verify the payment can be fetched
     String paymentId = com.jayway.jsonpath.JsonPath.read(postResult, "$.id");
-    mvc.perform(MockMvcRequestBuilders.get(PAYMENTS_URL + "/" + paymentId))
+    mvc.perform(MockMvcRequestBuilders.get(PAYMENT_URL + "/" + paymentId))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.id").value(paymentId))
         .andExpect(jsonPath("$.status").value("Authorized"))
