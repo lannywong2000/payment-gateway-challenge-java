@@ -25,7 +25,7 @@ public class PostPaymentRequest implements Serializable {
   private int expiryYear;
 
   @NotBlank(message = "currency is required")
-  @Pattern(regexp = "[A-Z]{3}", message = "currency must be a 3-letter ISO code (e.g. USD, GBP, EUR)")
+  @Pattern(regexp = "USD|GBP|EUR", message = "currency must be one of: USD, GBP, EUR")
   private String currency;
 
   @Positive(message = "amount must be a positive integer")
