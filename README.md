@@ -26,7 +26,7 @@ For documentation openAPI is included, and it can be found under the following u
 
 ---
 
-## Getting Started
+# Getting Started
 
 ```bash
 # 1. Start the bank simulator
@@ -38,7 +38,7 @@ docker-compose up
 
 Swagger UI: **http://localhost:8090/swagger-ui/index.html**
 
-### Running tests
+## Running tests
 
 ```bash
 # Unit tests only — no Docker required
@@ -54,7 +54,7 @@ Swagger UI: **http://localhost:8090/swagger-ui/index.html**
 ./gradlew test
 ```
 
-### Quick smoke test
+## Quick smoke test
 ```bash
 # Authorized (card ending in odd digit)
 curl -X POST http://localhost:8090/payments \
@@ -67,9 +67,9 @@ curl http://localhost:8090/payment/{id}
 
 ---
 
-## Design
+# Design
 
-### Payment flow
+## Payment flow
 
 ```
 POST /payments
@@ -84,7 +84,7 @@ POST /payments
       └─ Store & return response
 ```
 
-### Validation rules
+## Validation rules
 
 | Field | Rule |
 |---|---|
@@ -97,7 +97,7 @@ POST /payments
 
 Any violation → `PostPaymentResponse { status: "Rejected" }` — same response shape as Authorized/Declined, stored with a UUID.
 
-### Key decisions
+## Key decisions
 
 - **Validation in service, not model** — all rules are private methods in `PaymentGatewayService` rather than JSR-380 annotations. Keeps the model a plain data carrier; validation is explicit and unit-testable.
 - **Bank errors → Declined** — 4xx/5xx from the bank are treated as a decline. From the merchant's perspective the payment didn't go through regardless of the reason.
@@ -105,7 +105,7 @@ Any violation → `PostPaymentResponse { status: "Rejected" }` — same response
 - **In-memory repository** — `HashMap<UUID, PostPaymentResponse>`, no persistence across restarts. Per spec, no real database is required.
 - **Supported currencies** — restricted to `USD`, `GBP`, `EUR` stored in an immutable `Set.of(...)`.
 
-### Test strategy
+## Test strategy
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
