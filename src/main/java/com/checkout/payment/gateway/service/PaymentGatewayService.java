@@ -2,13 +2,13 @@ package com.checkout.payment.gateway.service;
 
 import com.checkout.payment.gateway.enums.PaymentStatus;
 import com.checkout.payment.gateway.exception.EventProcessingException;
-import com.checkout.payment.gateway.exception.PaymentValidationException;
 import com.checkout.payment.gateway.model.BankPaymentRequest;
 import com.checkout.payment.gateway.model.BankPaymentResponse;
 import com.checkout.payment.gateway.model.PostPaymentRequest;
 import com.checkout.payment.gateway.model.PostPaymentResponse;
 import com.checkout.payment.gateway.repository.PaymentsRepository;
 import java.time.YearMonth;
+import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,6 +24,7 @@ import org.springframework.web.client.RestTemplate;
 public class PaymentGatewayService {
 
   private static final Logger LOG = LoggerFactory.getLogger(PaymentGatewayService.class);
+  private static final Set<String> SUPPORTED_CURRENCIES = Set.of("USD", "GBP", "EUR");
 
   private final PaymentsRepository paymentsRepository;
   private final RestTemplate restTemplate;
@@ -46,7 +47,14 @@ public class PaymentGatewayService {
   public PostPaymentResponse processPayment(PostPaymentRequest request) {
     LOG.debug("Processing payment request: {}", request);
 
-    validateExpiryDate(request.getExpiryMonth(), request.getExpiryYear());
+    PostPaymentResponse response = buildResponse(request);
+
+    if (!isRequestValid(request)) {
+      LOG.warn("Payment request rejected due to validation failure, paymentId={}", response.getId());
+      response.setStatus(PaymentStatus.REJECTED);
+      paymentsRepository.add(response);
+      return response;
+    }
 
     BankPaymentRequest bankRequest = new BankPaymentRequest(
         request.getCardNumber(),
@@ -55,14 +63,6 @@ public class PaymentGatewayService {
         request.getAmount(),
         request.getCvv()
     );
-
-    PostPaymentResponse response = new PostPaymentResponse();
-    response.setId(UUID.randomUUID());
-    response.setCardNumberLastFour(request.getCardNumberLastFour());
-    response.setExpiryMonth(request.getExpiryMonth());
-    response.setExpiryYear(request.getExpiryYear());
-    response.setCurrency(request.getCurrency());
-    response.setAmount(request.getAmount());
 
     try {
       ResponseEntity<BankPaymentResponse> bankResponse =
@@ -82,18 +82,54 @@ public class PaymentGatewayService {
     } catch (HttpServerErrorException e) {
       LOG.warn("Bank returned server error {}: {}", e.getStatusCode(), e.getMessage());
       response.setStatus(PaymentStatus.DECLINED);
+    } catch (Exception e) {
+      LOG.error("An unexpected error occurred", e);
+      response.setStatus(PaymentStatus.DECLINED);
     }
 
     paymentsRepository.add(response);
     return response;
   }
 
-  private void validateExpiryDate(int month, int year) {
-    YearMonth expiry = YearMonth.of(year, month);
-    YearMonth now = YearMonth.now();
-    if (expiry.isBefore(now)) {
-      throw new PaymentValidationException(
-          "Card has expired: expiry date " + month + "/" + year + " is in the past");
+  private PostPaymentResponse buildResponse(PostPaymentRequest request) {
+    PostPaymentResponse response = new PostPaymentResponse();
+    response.setId(UUID.randomUUID());
+    response.setCardNumberLastFour(request.getCardNumberLastFour());
+    response.setExpiryMonth(request.getExpiryMonth());
+    response.setExpiryYear(request.getExpiryYear());
+    response.setCurrency(request.getCurrency());
+    response.setAmount(request.getAmount());
+    return response;
+  }
+
+  private boolean isRequestValid(PostPaymentRequest request) {
+    return isCardNumberValid(request.getCardNumber())
+        && isExpiryValid(request.getExpiryMonth(), request.getExpiryYear())
+        && isCurrencyValid(request.getCurrency())
+        && isAmountValid(request.getAmount())
+        && isCvvValid(request.getCvv());
+  }
+
+  private boolean isCardNumberValid(String cardNumber) {
+    return cardNumber != null && cardNumber.matches("\\d{14,19}");
+  }
+
+  private boolean isExpiryValid(int month, int year) {
+    if (month < 1 || month > 12) {
+      return false;
     }
+    return !YearMonth.of(year, month).isBefore(YearMonth.now());
+  }
+
+  private boolean isCurrencyValid(String currency) {
+    return currency != null && SUPPORTED_CURRENCIES.contains(currency);
+  }
+
+  private boolean isAmountValid(int amount) {
+    return amount > 0;
+  }
+
+  private boolean isCvvValid(String cvv) {
+    return cvv != null && cvv.matches("\\d{3,4}");
   }
 }

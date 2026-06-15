@@ -145,110 +145,150 @@ class PaymentGatewayControllerTest {
     mockBankServer.verify();
   }
 
+  @Test
+  void whenBankReturns500ThenPaymentIsStoredAsDeclined() throws Exception {
+    mockBankServer.expect(requestTo(BANK_URL))
+        .andExpect(method(HttpMethod.POST))
+        .andRespond(withServerError());
+
+    mvc.perform(MockMvcRequestBuilders.post(PAYMENTS_URL)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(buildPaymentRequestJson("2222405343248110", 1, 2027, "USD", 100, "123")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("Declined"));
+
+    mockBankServer.verify();
+  }
+
+  @Test
+  void whenBankReturns4xxThenPaymentIsStoredAsDeclined() throws Exception {
+    mockBankServer.expect(requestTo(BANK_URL))
+        .andExpect(method(HttpMethod.POST))
+        .andRespond(withStatus(HttpStatus.UNPROCESSABLE_ENTITY));
+
+    mvc.perform(MockMvcRequestBuilders.post(PAYMENTS_URL)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(buildPaymentRequestJson("2222405343248110", 1, 2027, "USD", 100, "123")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("Declined"));
+
+    mockBankServer.verify();
+  }
+
   // -------------------------------------------------------------------------
   // POST /payments — Rejected (validation failures)
   // -------------------------------------------------------------------------
 
   @Test
-  void whenCardNumberIsTooShortThenBadRequestIsReturned() throws Exception {
+  void whenCardNumberIsTooShortThenRejectedIsReturned() throws Exception {
     mvc.perform(MockMvcRequestBuilders.post(PAYMENTS_URL)
             .contentType(MediaType.APPLICATION_JSON)
-            .content(buildPaymentRequestJson("12345", 1, 2026, "USD", 100, "123")))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.message").isNotEmpty());
+            .content(buildPaymentRequestJson("12345", 6, 2028, "USD", 100, "123")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("Rejected"));
   }
 
   @Test
-  void whenCardNumberContainsNonNumericCharactersThenBadRequestIsReturned() throws Exception {
+  void whenCardNumberContainsNonNumericCharactersThenRejectedIsReturned() throws Exception {
     mvc.perform(MockMvcRequestBuilders.post(PAYMENTS_URL)
             .contentType(MediaType.APPLICATION_JSON)
-            .content(buildPaymentRequestJson("2222405343abcd77", 1, 2026, "USD", 100, "123")))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.message").isNotEmpty());
+            .content(buildPaymentRequestJson("2222405343abcd77", 6, 2028, "USD", 100, "123")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("Rejected"));
   }
 
   @Test
-  void whenExpiryMonthIsOutOfRangeThenBadRequestIsReturned() throws Exception {
+  void whenExpiryMonthIsOutOfRangeThenRejectedIsReturned() throws Exception {
     mvc.perform(MockMvcRequestBuilders.post(PAYMENTS_URL)
             .contentType(MediaType.APPLICATION_JSON)
-            .content(buildPaymentRequestJson("2222405343248877", 13, 2026, "USD", 100, "123")))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.message").isNotEmpty());
+            .content(buildPaymentRequestJson("2222405343248877", 13, 2028, "USD", 100, "123")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("Rejected"));
   }
 
   @Test
-  void whenExpiryYearIsInThePastThenBadRequestIsReturned() throws Exception {
+  void whenExpiryYearIsInThePastThenRejectedIsReturned() throws Exception {
     mvc.perform(MockMvcRequestBuilders.post(PAYMENTS_URL)
             .contentType(MediaType.APPLICATION_JSON)
             .content(buildPaymentRequestJson("2222405343248877", 1, 2020, "USD", 100, "123")))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.message").isNotEmpty());
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("Rejected"));
   }
 
   @Test
-  void whenCardIsExpiredThenBadRequestIsReturned() throws Exception {
-    // Year is valid (current year) but month is already past — relies on the
-    // service-level expiry check. We use January of the current year to ensure
-    // we are constructing a date that is reliably in the past for any month > 1.
+  void whenCardIsExpiredThenRejectedIsReturned() throws Exception {
+    // January 2024 is reliably in the past for any month after January 2024.
     mvc.perform(MockMvcRequestBuilders.post(PAYMENTS_URL)
             .contentType(MediaType.APPLICATION_JSON)
             .content(buildPaymentRequestJson("2222405343248877", 1, 2024, "USD", 100, "123")))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.message").isNotEmpty());
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("Rejected"))
+        .andExpect(jsonPath("$.id").isNotEmpty())
+        .andExpect(jsonPath("$.cardNumberLastFour").value(8877));
   }
 
   @Test
-  void whenCurrencyIsNotThreeLettersThenBadRequestIsReturned() throws Exception {
+  void whenCurrencyIsNotThreeLettersThenRejectedIsReturned() throws Exception {
     mvc.perform(MockMvcRequestBuilders.post(PAYMENTS_URL)
             .contentType(MediaType.APPLICATION_JSON)
-            .content(buildPaymentRequestJson("2222405343248877", 1, 2026, "US", 100, "123")))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.message").isNotEmpty());
+            .content(buildPaymentRequestJson("2222405343248877", 6, 2028, "US", 100, "123")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("Rejected"));
   }
 
   @Test
-  void whenCurrencyContainsLowercaseLettersThenBadRequestIsReturned() throws Exception {
+  void whenCurrencyContainsLowercaseLettersThenRejectedIsReturned() throws Exception {
     mvc.perform(MockMvcRequestBuilders.post(PAYMENTS_URL)
             .contentType(MediaType.APPLICATION_JSON)
-            .content(buildPaymentRequestJson("2222405343248877", 1, 2026, "usd", 100, "123")))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.message").isNotEmpty());
+            .content(buildPaymentRequestJson("2222405343248877", 6, 2028, "usd", 100, "123")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("Rejected"));
   }
 
   @Test
-  void whenAmountIsZeroThenBadRequestIsReturned() throws Exception {
+  void whenCurrencyIsNullThenRejectedIsReturned() throws Exception {
     mvc.perform(MockMvcRequestBuilders.post(PAYMENTS_URL)
             .contentType(MediaType.APPLICATION_JSON)
-            .content(buildPaymentRequestJson("2222405343248877", 1, 2026, "USD", 0, "123")))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.message").isNotEmpty());
+            .content("{\"card_number\":\"2222405343248877\",\"expiry_month\":6,\"expiry_year\":2028,"
+                + "\"amount\":100,\"cvv\":\"123\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("Rejected"));
   }
 
   @Test
-  void whenAmountIsNegativeThenBadRequestIsReturned() throws Exception {
+  void whenAmountIsZeroThenRejectedIsReturned() throws Exception {
     mvc.perform(MockMvcRequestBuilders.post(PAYMENTS_URL)
             .contentType(MediaType.APPLICATION_JSON)
-            .content(buildPaymentRequestJson("2222405343248877", 1, 2026, "USD", -1, "123")))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.message").isNotEmpty());
+            .content(buildPaymentRequestJson("2222405343248877", 6, 2028, "USD", 0, "123")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("Rejected"));
   }
 
   @Test
-  void whenCvvIsTooShortThenBadRequestIsReturned() throws Exception {
+  void whenAmountIsNegativeThenRejectedIsReturned() throws Exception {
     mvc.perform(MockMvcRequestBuilders.post(PAYMENTS_URL)
             .contentType(MediaType.APPLICATION_JSON)
-            .content(buildPaymentRequestJson("2222405343248877", 1, 2026, "USD", 100, "12")))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.message").isNotEmpty());
+            .content(buildPaymentRequestJson("2222405343248877", 6, 2028, "USD", -1, "123")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("Rejected"));
   }
 
   @Test
-  void whenCvvContainsNonNumericCharactersThenBadRequestIsReturned() throws Exception {
+  void whenCvvIsTooShortThenRejectedIsReturned() throws Exception {
     mvc.perform(MockMvcRequestBuilders.post(PAYMENTS_URL)
             .contentType(MediaType.APPLICATION_JSON)
-            .content(buildPaymentRequestJson("2222405343248877", 1, 2026, "USD", 100, "1ab")))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.message").isNotEmpty());
+            .content(buildPaymentRequestJson("2222405343248877", 6, 2028, "USD", 100, "12")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("Rejected"));
+  }
+
+  @Test
+  void whenCvvContainsNonNumericCharactersThenRejectedIsReturned() throws Exception {
+    mvc.perform(MockMvcRequestBuilders.post(PAYMENTS_URL)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(buildPaymentRequestJson("2222405343248877", 6, 2028, "USD", 100, "1ab")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("Rejected"));
   }
 
   @Test
